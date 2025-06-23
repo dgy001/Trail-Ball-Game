@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Trail Battle Game</title>
+    <style>
+        body {
+    margin: 0; 
+    overflow: hidden;
+    background: #f7f7f0;
+    font-family: Arial, sans-serif;
+    color: #333;
+}
+#gameCanvas {
+    display: block;
+    margin: 0 auto;
+    background: #f7f7f0;
+}
+#overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 1;
+            transition: opacity 0.5s ease;
+        }
+
+        #skillSelect {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 500px;
+            line-height: 1.6;
+        }
+
+        .skill-select {
+            margin: 25px 0;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+
+        .skill-option {
+            display: inline-block;
+            margin: 8px;
+            padding: 10px 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: #666;
+        }
+
+        .skill-option.selected {
+            background: #88c0a0;
+            color: white;
+            border-color: #88c0a0;
+        }
+
+        .skill-option:hover {
+            border-color: #88c0a0;
+        }
+
+        .hint {
+            font-size:14px;
+            margin-top:10px;
+            color:#555;
+        }
+        #startButton {
+            background: #ccc;
+            color: #666;
+            border: 1px solid #bbb;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: not-allowed;
+            transition: all 0.3s ease;
+        }
+        
+        #startButton:not(:disabled) {
+            background: #88c4a2;
+            color: white;
+            border: 1px solid #88c0a0;
+            cursor: pointer;
+        }
+
+        #startButton:not(:disabled):hover {
+            background: #66a785;
+            border-color: #66a785;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay">
+        <div id="skillSelect">
+            <h2>选择技能</h2>
+            <div class="skill-select">
+                <strong>绿色玩家 (P1)</strong>
+                <div>
+                    <div class="skill-option" data-player="1" data-skill="fade">虚化无敌</div>
+                    <div class="skill-option" data-player="1" data-skill="speed">爆发加速</div>
+                    <div class="skill-option" data-player="1" data-skill="burst">连发球</div>
+                </div>
+            </div>
+            <div class="skill-select">
+                <strong>浅蓝玩家 (P2)</strong>
+                <div>
+                    <div class="skill-option" data-player="2" data-skill="fade">虚化无敌</div>
+                    <div class="skill-option" data-player="2" data-skill="speed">爆发加速</div>
+                    <div class="skill-option" data-player="2" data-skill="burst">连发球</div>
+                </div>
+            </div>
+            <button id="startButton" disabled>两位玩家都选择后开始</button>
+
+            <div class="hint">
+                技能说明:<br>
+                虚化无敌: 短暂无敌且半透明<br>
+                爆发加速: 瞬间提升移动速度<br>
+                连发球: 快速发射4个小球
+            </div>
+        </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let selectedSkills = {
+            player1: null,
+            player2: null
+        };
+
+        // 技能选择逻辑
+        document.querySelectorAll('.skill-option').forEach(option => {
+            option.addEventListener('click', function () {
+                const player = this.dataset.player;
+                const skill = this.dataset.skill;
+
+                // 清除该玩家之前的选择
+                document.querySelectorAll(`.skill-option[data-player="${player}"]`).forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+
+                // 选中当前技能
+                this.classList.add('selected');
+                selectedSkills[`player${player}`] = skill;
+
+                // 检查是否两个玩家都已选择
+                const startButton = document.getElementById('startButton');
+                if (selectedSkills.player1 && selectedSkills.player2) {
+                    startButton.disabled = false;
+                }
+            });
+        });
+
+        document.getElementById('startButton').addEventListener('click', function () {
+            fadeOutOverlay();
+            startGame();
+        });
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const keys = {};
+
+        function normalizeKey(key) {
+            if (key.length === 1) {
+                return key.toLowerCase();
+            }
+            return key; 
+        }
+
+        window.addEventListener('keydown', e => {
+            const key = normalizeKey(e.key);
+            keys[key] = true;
+            if (key === ' ') e.preventDefault();
+        });
+        window.addEventListener('keyup', e => {
+            const key = normalizeKey(e.key);
+            keys[key] = false;
+        });
+
+        function dist(x1,y1,x2,y2) {
+            const dx = x2 - x1, dy = y2 - y1;
+            return Math.sqrt(dx*dx + dy*dy);
+        }
+
+        class Chain {
+            constructor(x, y, color) {
+                this.color = color;
+                this.segmentCount = 10;
+                this.segmentLength = 18;
+                this.friction = 0.99;
+                this.segments = [];
+                for (let i=0;i<this.segmentCount;i++){
+                    this.segments.push({
+                        x:x, y:y,
+                        oldX:x, oldY:y,
+                        mass: (i===this.segmentCount-1)?2:1
+                    });
+                }
+                this.ballRadius = 2;
+                this.maxBallRadius = 20; 
+                this.detached = false; 
+                this.growNewBallTimer = 0; 
+            }
+
+            update(anchorX, anchorY) {
+                if (!this.detached) {
+                    if (this.ballRadius < this.maxBallRadius) {
+                        this.ballRadius += 0.05;
+                        if (this.ballRadius > this.maxBallRadius) this.ballRadius = this.maxBallRadius;
+                    }
+                } else {
+                    if (this.growNewBallTimer>0) {
+                        this.growNewBallTimer--;
+                        if (this.growNewBallTimer===0) {
+                            this.detached = false;
+                            this.ballRadius = 2;
+                        }
+                    }
+                }
+
+                let lastSeg = this.segments[this.segments.length-1];
+                lastSeg.mass = 1 + (this.ballRadius / 4);
+
+                this.segments[0].x = anchorX;
+                this.segments[0].y = anchorY;
+
+                for (let seg of this.segments) {
+                    const vx = (seg.x - seg.oldX)*this.friction;
+                    const vy = (seg.y - seg.oldY)*this.friction;
+                    seg.oldX = seg.x;
+                    seg.oldY = seg.y;
+                    seg.x += vx;
+                    seg.y += vy;
+                }
+
+                for (let k=0;k<3;k++){
+                    for (let i=0;i<this.segments.length-1;i++) {
+                        let A = this.segments[i];
+                        let B = this.segments[i+1];
+                        let dx = B.x - A.x;
+                        let dy = B.y - A.y;
+                        let d = Math.sqrt(dx*dx+dy*dy);
+                        if (d===0) continue;
+                        let diff = (d - this.segmentLength)/d;
+
+                        let mSum = A.mass+B.mass;
+                        let ratioA = B.mass/mSum;
+                        let ratioB = A.mass/mSum;
+
+                        if (i===0) {
+                            B.x -= dx*diff;
+                            B.y -= dy*diff;
+                        } else {
+                            A.x += dx*diff*ratioA;
+                            A.y += dy*diff*ratioA;
+                            B.x -= dx*diff*ratioB;
+                            B.y -= dy*diff*ratioB;
+                        }
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.strokeStyle = this.color+'99';
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                if (this.segments.length === 1) {
+                    ctx.beginPath();
+                    ctx.arc(this.segments[0].x,this.segments[0].y,5,0,Math.PI*2);
+                    ctx.fillStyle=this.color;
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.moveTo(this.segments[0].x,this.segments[0].y);
+                    for (let i = 1; i < this.segments.length - 1; i++) {
+                        const x_mid = (this.segments[i].x + this.segments[i+1].x) / 2;
+                        const y_mid = (this.segments[i].y + this.segments[i+1].y) / 2;
+                        ctx.quadraticCurveTo(this.segments[i].x, this.segments[i].y, x_mid, y_mid);
+                    }
+                    const last = this.segments.length - 1;
+                    ctx.quadraticCurveTo(
+                        this.segments[last-1].x,
+                        this.segments[last-1].y,
+                        this.segments[last].x,
+                        this.segments[last].y
+                    );
+                    ctx.stroke();
+                }
+
+                if (!this.detached && this.segments.length>0) {
+                    let end = this.segments[this.segments.length-1];
+                    ctx.beginPath();
+                    ctx.fillStyle = this.color;
+                    ctx.arc(end.x,end.y,this.ballRadius,0,Math.PI*2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+
+            getEndSpeed() {
+                let end = this.segments[this.segments.length-1];
+                let vx = end.x - end.oldX;
+                let vy = end.y - end.oldY;
+                return Math.sqrt(vx*vx+vy*vy);
+            }
+
+            checkCollision(player, damageValue=3) {
+                if (!player.alive || player.invulnerable || this.detached) return;
+                let end = this.segments[this.segments.length-1];
+                let d = dist(player.x,player.y,end.x,end.y);
+                if (d < player.radius+this.ballRadius && this.getEndSpeed()>5) {
+                    player.takeDamage(damageValue);
+                }
+            }
+
+            detachBall() {
+                if (this.detached) return null;
+                this.detached = true;
+                this.growNewBallTimer=300;
+                let end = this.segments[this.segments.length-1];
+                let vx = (end.x - end.oldX)*this.friction;
+                let vy = (end.y - end.oldY)*this.friction;
+                const radius = this.ballRadius;
+                this.ballRadius = 0; 
+                return {x:end.x, y:end.y, vx:vx*2, vy:vy*2, radius:radius, color:this.color};
+            }
+
+            restoreBall(x,y,radius) {
+                this.detached=false;
+                this.ballRadius=radius;
+                let last = this.segments[this.segments.length-1];
+                last.x=x; last.y=y;
+                last.oldX=x; last.oldY=y;
+                this.growNewBallTimer=0;
+            }
+        }
+
+        class Projectile {
+            constructor(x,y,vx,vy,radius,color) {
+                this.x=x; 
+                this.y=y;
+                this.vx=vx; 
+                this.vy=vy;
+                this.radius=radius;
+                this.originalColor=color;
+                this.color=color;
+                this.friction=0.99;
+                this.alive=true;
+                this.timeSinceDetach=0;
+                this.state='normal'; 
+            }
+
+            update() {
+                if (!this.alive) return;
+                this.timeSinceDetach++;
+                if (this.state==='normal' && this.timeSinceDetach>300) {
+                    this.state='gray';
+                    this.color='#909090'; 
+                }
+
+                this.vx*=this.friction;
+                this.vy*=this.friction;
+                this.x+=this.vx;
+                this.y+=this.vy;
+
+                if (this.x<-200||this.x>canvas.width+200||this.y<-200||this.y>canvas.height+200) {
+                    this.alive=false;
+                }
+            }
+
+            draw(ctx) {
+                if (!this.alive) return;
+                ctx.save();
+                ctx.fillStyle=this.color;
+                ctx.beginPath();
+                ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class Player {
+            constructor(x,y,color,controls,skill) {
+                this.x = x; this.y=y;
+                this.vx = 0; this.vy=0;
+                this.color = color;
+                this.radius=12;
+                this.health=10;
+                this.alive=true;
+
+                this.invulnerable=false;
+                this.invTime=0;
+
+                this.controls=controls;
+                this.speed=0;
+                this.maxSpeed=5;
+                this.acc=0.2;
+
+                this.angle=0;
+                this.targetAngle=0;
+
+                this.chain = new Chain(x,y,color);
+                
+                // 技能相关属性
+                this.skill = skill;
+                this.skillCooldown = 0;
+                this.skillDuration = 0;
+                this.speedBoostMultiplier = 1;
+                this.burstShotsRemaining = 0;
+                this.burstInterval = 0;
+
+                this.fadeInvulTime=0;
+                this.fadeCooldown=0;
+
+                this.deathFade = 1.0;
+                this.deathFadeSpeed = 0.01;
+            }
+
+            useSkill() {
+                if (this.skillCooldown > 0) return;
+                
+                switch(this.skill) {
+                    case 'fade':
+                        this.fadeInvulTime = 60;
+                        this.invulnerable = true;
+                        this.skillCooldown = 300;
+                        break;
+                    case 'speed':
+                        this.speedBoostMultiplier = 2;
+                        this.skillDuration = 90;
+                        this.skillCooldown = 300;
+                        break;
+                    case 'burst':
+                        this.burstShotsRemaining = 4;
+                        this.skillCooldown = 300;
+                        break;
+                }
+            }
+
+            update(keys,other,projectiles,gameOverPhase) {
+                let acceptInput = (gameOverPhase === 0);
+
+                if (!this.alive) {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    if (this.deathFade > 0) {
+                        this.deathFade -= this.deathFadeSpeed;
+                        if (this.deathFade<0) this.deathFade=0;
+                    }
+                    return;
+                }
+
+                // 更新技能状态
+                if (this.skillCooldown > 0) this.skillCooldown--;
+                if (this.skillDuration > 0) {
+                    this.skillDuration--;
+                    if (this.skillDuration === 0) {
+                        this.speedBoostMultiplier = 1;
+                    }
+                }
+
+                if (this.invulnerable && this.invTime>0) {
+                    this.invTime--;
+                    if (this.invTime<=0) this.invulnerable=false;
+                }
+
+                if (this.fadeInvulTime>0) {
+                    this.fadeInvulTime--;
+                    if (this.fadeInvulTime<=0) {
+                        this.invulnerable=false;
+                        this.invTime = 0;
+                        this.fadeCooldown=120;
+                    }
+                } else {
+                    if (this.fadeCooldown>0) this.fadeCooldown--;
+                }
+
+                let dirX=0, dirY=0;
+                if (acceptInput) {
+                    if (keys[this.controls.up]) dirY-=1;
+                    if (keys[this.controls.down]) dirY+=1;
+                    if (keys[this.controls.left]) dirX-=1;
+                    if (keys[this.controls.right]) dirX+=1;
+                }
+
+                if (dirX!==0||dirY!==0) {
+                    let len = Math.sqrt(dirX*dirX+dirY*dirY);
+                    this.targetAngle = Math.atan2(dirY,dirX);
+                    this.speed = Math.min(this.speed+this.acc,this.maxSpeed * this.speedBoostMultiplier);
+                    this.vx = (dirX/len)*this.speed;
+                    this.vy = (dirY/len)*this.speed;
+                } else {
+                    this.speed *= 0.95;
+                    this.vx *= 0.95;
+                    this.vy *= 0.95;
+                }
+
+                // 使用技能
+                if (acceptInput && keys[this.controls.drift] && this.skillCooldown <= 0) {
+                    this.useSkill();
+                }
+
+                // 甩出流星锤
+                if (acceptInput && keys[this.controls.throwKey] && !this.chain.detached) {
+                    const ballData = this.chain.detachBall();
+                    if (ballData) {
+                        if (this.burstShotsRemaining > 0) {
+                            // 连发模式下，发射四个球
+                            for (let i = 0; i < 100; i++) {
+                                const angle = this.angle + (i - 1.5) * Math.PI / 6; // 调整角度分布
+                                const speed = 5; // 调整速度
+                                const vx = ballData.vx + Math.cos(angle) * speed;
+                                const vy = ballData.vy + Math.sin(angle) * speed;
+                                game.projectiles.push(new Projectile(
+                                    ballData.x, ballData.y, vx, vy,
+                                    10, ballData.color // 中等大小的球
+                                ));
+                            }
+                            this.burstShotsRemaining = 0;
+                        } else {
+                            // 正常模式下，发射一个球
+                            game.projectiles.push(new Projectile(
+                                ballData.x, ballData.y, ballData.vx, ballData.vy,
+                                ballData.radius, ballData.color
+                            ));
+                        }
+                    }
+                }
+
+                let angleDiff = (this.targetAngle - this.angle + Math.PI*3)%(Math.PI*2)-Math.PI;
+                this.angle += angleDiff*0.1;
+
+                if (other.alive) {
+                    let dx = (this.x+this.vx)-other.x;
+                    let dy = (this.y+this.vy)-other.y;
+                    let d = Math.sqrt(dx*dx+dy*dy);
+                    let minDist = this.radius+other.radius;
+                    if (d<minDist) {
+                        let nx=dx/d, ny=dy/d;
+                        let overlap = (minDist - d)*0.5;
+                        this.x -= overlap*nx;
+                        this.y -= overlap*ny;
+                        other.x += overlap*nx;
+                        other.y += overlap*ny;
+
+                        let rvx = this.vx - other.vx;
+                        let rvy = this.vy - other.vy;
+                        let relativeSpeed = rvx*nx+rvy*ny;
+                        if (relativeSpeed < -2) {
+                            if (!this.invulnerable) this.takeDamage(5);
+                            if (!other.invulnerable) other.takeDamage(5);
+                        }
+
+                        this.vx *= -0.5; this.vy *= -0.5;
+                        other.vx *= -0.5; other.vy *= -0.5;
+                    }
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x<this.radius) {
+                    this.x=this.radius;
+                    this.vx = -this.vx*1.5;
+                }
+                if (this.x>canvas.width-this.radius) {
+                    this.x=canvas.width-this.radius;
+                    this.vx = -this.vx*1.5;
+                }
+                if (this.y<this.radius) {
+                    this.y=this.radius;
+                    this.vy = -this.vy*1.5;
+                }
+                if (this.y>canvas.height-this.radius) {
+                    this.y=canvas.height-this.radius;
+                    this.vy = -this.vy*1.5;
+                }
+
+                this.chain.update(this.x,this.y);
+                other.chain.checkCollision(this,3);
+
+                for (let p of projectiles) {
+                    if (p.alive && p.state==='gray') {
+                        let dd=dist(this.x,this.y,p.x,p.y);
+                        if (dd < this.radius+p.radius) {
+                            this.chain.restoreBall(p.x,p.y,p.radius);
+                            p.alive=false;
+                        }
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = this.alive ? 1 : this.deathFade;
+
+                this.chain.draw(ctx);
+
+                if (!this.alive && this.deathFade <=0) {
+                    ctx.restore();
+                    return;
+                }
+
+                ctx.translate(this.x,this.y);
+                ctx.rotate(this.angle);
+
+                if (this.fadeInvulTime>0 && this.alive) {
+                    ctx.globalAlpha*=0.3;
+                } else if (this.invulnerable && this.alive) {
+                    ctx.globalAlpha*=0.6;
+                }
+
+                ctx.beginPath();
+                ctx.arc(0,0,this.radius,0,Math.PI*2);
+                ctx.fillStyle=this.color;
+                ctx.fill();
+
+                // 绘制技能冷却指示器
+                if (this.skillCooldown > 0 && this.alive) {
+                    const cooldownRatio = this.skillCooldown / 300;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius + 4, -Math.PI/2, -Math.PI/2 + (1-cooldownRatio) * Math.PI * 2);
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            drawHealthBar(ctx,x,y) {
+                if (!this.alive && this.deathFade<=0) return;
+                ctx.save();
+                ctx.globalAlpha = this.alive?1:this.deathFade;
+
+                const w=150,h=12;
+                ctx.fillStyle='#ccc';
+                ctx.fillRect(x,y,w,h);
+                const hw = (this.health/10)*w;
+                ctx.fillStyle=this.color;
+                ctx.fillRect(x,y,hw,h);
+                ctx.strokeStyle='#999';
+                ctx.strokeRect(x,y,w,h);
+
+                ctx.restore();
+            }
+
+            takeDamage(amount) {
+                if (this.invulnerable || !this.alive) return;
+                this.health-=amount;
+                this.invulnerable=true;
+                this.invTime=30;
+                if (this.health<=0) {
+                    this.health=0;
+                    this.alive=false;
+                }
+            }
+        }
+
+        class Game {
+            constructor() {
+                // ... existing code ...
+this.player1 = new Player(200,canvas.height/2,'#88c0a0',{
+    up:'ArrowUp',
+    down:'ArrowDown',
+    left:'ArrowLeft',
+    right:'ArrowRight',
+    drift:',',  // 原来是space
+    throwKey:'.'  // 原来是q
+}, selectedSkills.player1);
+
+this.player2 = new Player(canvas.width-200,canvas.height/2,'#8faad9',{
+    up:'w',
+    down:'s',
+    left:'a',
+    right:'d',
+    drift:'q',  // 原来是j
+    throwKey:'e'  // 原来是k
+}, selectedSkills.player2);
+// ... existing code ...
+                this.projectiles = [];
+                this.gameOverPhase = 0;
+                this.gameOverTimer = 0;
+                this.animationFrame=null;
+            }
+
+            update() {
+                for (let p of this.projectiles) {
+                    p.update();
+                }
+                this.projectiles = this.projectiles.filter(p=>p.alive);
+
+                this.player1.update(keys,this.player2,this.projectiles,this.gameOverPhase);
+                this.player2.update(keys,this.player1,this.projectiles,this.gameOverPhase);
+
+                for (let p of this.projectiles) {
+                    if (!p.alive) continue;
+                    if (this.player1.alive && !this.player1.invulnerable) {
+                        let d1 = dist(p.x,p.y,this.player1.x,this.player1.y);
+                        if (d1 < this.player1.radius + p.radius) {
+                            this.player1.takeDamage(3);
+                            p.alive=false;
+                        }
+                    }
+                    if (p.alive && this.player2.alive && !this.player2.invulnerable) {
+                        let d2 = dist(p.x,p.y,this.player2.x,this.player2.y);
+                        if (d2 < this.player2.radius + p.radius) {
+                            this.player2.takeDamage(3);
+                            p.alive=false;
+                        }
+                    }
+                }
+                this.projectiles = this.projectiles.filter(p=>p.alive);
+
+                if (this.gameOverPhase === 0) {
+                    if (!this.player1.alive || !this.player2.alive) {
+                        this.gameOverPhase = 1;
+                        this.gameOverTimer = 0;
+                    }
+                } else if (this.gameOverPhase === 1) {
+                    this.gameOverTimer++;
+                    if (this.gameOverTimer > 120) {
+                        this.gameOverPhase = 2;
+                        this.gameOverTimer = 0;
+                    }
+                } else if (this.gameOverPhase === 2) {
+                    this.gameOverTimer++;
+                }
+            }
+
+            draw() {
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+
+                for (let p of this.projectiles) {
+                    p.draw(ctx);
+                }
+
+                this.player1.draw(ctx);
+                this.player2.draw(ctx);
+
+                this.player1.drawHealthBar(ctx,20,20);
+                this.player2.drawHealthBar(ctx,canvas.width-170,20);
+
+                if (this.gameOverPhase > 1) {
+                    ctx.fillStyle='#333';
+                    ctx.font='36px Arial';
+                    ctx.textAlign='center';
+                    let alpha = Math.min(this.gameOverTimer/60,1);
+                    ctx.globalAlpha=alpha;
+                    const winner = (!this.player1.alive)?'浅蓝玩家':'浅绿玩家';
+                    ctx.fillText(`${winner} 获胜!`, canvas.width/2, canvas.height/2);
+                    ctx.font='20px Arial';
+                    ctx.fillText('刷新页面重新开始', canvas.width/2, canvas.height/2+40);
+                    ctx.globalAlpha=1;
+                }
+            }
+
+            loop() {
+                this.update();
+                this.draw();
+                this.animationFrame = requestAnimationFrame(this.loop.bind(this));
+            }
+
+            start() {
+                this.loop();
+            }
+        }
+
+        let overlay = document.getElementById('overlay');
+        function fadeOutOverlay() {
+            overlay.style.opacity = '0';
+            setTimeout(() => {
+                overlay.style.display='none';
+            }, 500);
+        }
+
+        let game = null;
+        function startGame() {
+            game = new Game();
+            game.start();
+        }
+
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Helvetica:wght@400;700&display=swap';
+        document.head.appendChild(link);
+    </script>
+</body>
+</html>
