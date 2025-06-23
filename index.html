@@ -93,6 +93,179 @@
             background: #66a785;
             border-color: #66a785;
         }
+
+        /* 移动端控制界面 */
+        .mobile-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            display: none;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .mobile-controls.show {
+            display: block;
+        }
+
+        .joystick-container {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            bottom: 40px;
+        }
+
+        .player1-controls {
+            left: 30px;
+        }
+
+        .player2-controls {
+            right: 30px;
+        }
+
+        .joystick-base {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            position: relative;
+            backdrop-filter: blur(10px);
+            pointer-events: auto;
+        }
+
+        .joystick-knob {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: none;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .control-buttons {
+            position: absolute;
+            bottom: 40px;
+        }
+
+        .player1-buttons {
+            left: 180px;
+        }
+
+        .player2-buttons {
+            right: 180px;
+        }
+
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 18px;
+            margin: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            touch-action: manipulation;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            pointer-events: auto;
+        }
+
+        .control-btn .material-icons {
+            font-size: 24px;
+        }
+
+        .control-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+            border-color: rgba(255, 255, 255, 0.7);
+            transform: scale(0.95);
+        }
+
+        .player1-theme {
+            border-color: #88c0a0;
+            background: rgba(136, 192, 160, 0.2);
+        }
+
+        .player1-theme.active {
+            background: rgba(136, 192, 160, 0.4);
+        }
+
+        .player2-theme {
+            border-color: #8faad9;
+            background: rgba(143, 170, 217, 0.2);
+        }
+
+        .player2-theme.active {
+            background: rgba(143, 170, 217, 0.4);
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 1024px) {
+            #skillSelect {
+                max-width: 90%;
+                padding: 20px;
+            }
+
+            .skill-option {
+                padding: 8px 15px;
+                font-size: 14px;
+            }
+
+            body {
+                touch-action: none;
+                -webkit-touch-callout: none;
+                -webkit-user-select: none;
+                user-select: none;
+            }
+
+            canvas {
+                touch-action: none;
+            }
+        }
+
+        @media (max-height: 600px) {
+            .mobile-controls {
+                height: 150px;
+            }
+
+            .joystick-container {
+                width: 100px;
+                height: 100px;
+                bottom: 25px;
+            }
+
+            .control-buttons {
+                bottom: 25px;
+            }
+
+            .player1-buttons {
+                left: 140px;
+            }
+
+            .player2-buttons {
+                right: 140px;
+            }
+
+            .control-btn {
+                width: 50px;
+                height: 50px;
+            }
+
+            .control-btn .material-icons {
+                font-size: 20px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -121,11 +294,39 @@
                 技能说明:<br>
                 虚化无敌: 短暂无敌且半透明<br>
                 爆发加速: 瞬间提升移动速度<br>
-                连发球: 快速发射4个小球
+                连发球: 快速发射4个小球<br>
+                <span id="mobileHint" style="display:none;color:#666;margin-top:10px;">
+                触屏设备将自动显示虚拟摇杆和按钮
+                </span>
             </div>
         </div>
     </div>
     <canvas id="gameCanvas"></canvas>
+    
+    <!-- 移动端控制界面 -->
+    <div id="mobileControls" class="mobile-controls">
+        <!-- 玩家1控制 -->
+        <div class="joystick-container player1-controls">
+            <div class="joystick-base player1-theme">
+                <div class="joystick-knob" id="joystick1"></div>
+            </div>
+        </div>
+        <div class="control-buttons player1-buttons">
+            <div class="control-btn player1-theme" id="skillBtn1"><span class="material-icons">flash_on</span></div>
+            <div class="control-btn player1-theme" id="throwBtn1"><span class="material-icons">my_location</span></div>
+        </div>
+        
+        <!-- 玩家2控制 -->
+        <div class="joystick-container player2-controls">
+            <div class="joystick-base player2-theme">
+                <div class="joystick-knob" id="joystick2"></div>
+            </div>
+        </div>
+        <div class="control-buttons player2-buttons">
+            <div class="control-btn player2-theme" id="skillBtn2"><span class="material-icons">flash_on</span></div>
+            <div class="control-btn player2-theme" id="throwBtn2"><span class="material-icons">my_location</span></div>
+        </div>
+    </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -187,6 +388,150 @@
             const key = normalizeKey(e.key);
             keys[key] = false;
         });
+
+        // 触屏控制系统
+        class TouchController {
+            constructor() {
+                this.isMobile = this.detectMobile();
+                this.joysticks = {
+                    player1: { x: 0, y: 0, active: false },
+                    player2: { x: 0, y: 0, active: false }
+                };
+                this.buttons = {
+                    player1: { skill: false, throw: false, skillPressed: false, throwPressed: false },
+                    player2: { skill: false, throw: false, skillPressed: false, throwPressed: false }
+                };
+                
+                if (this.isMobile) {
+                    this.initMobileControls();
+                    const mobileHint = document.getElementById('mobileHint');
+                    if (mobileHint) {
+                        mobileHint.style.display = 'block';
+                    }
+                }
+            }
+
+            detectMobile() {
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                       window.innerWidth <= 1024;
+            }
+
+            initMobileControls() {
+                document.getElementById('mobileControls').classList.add('show');
+                this.setupJoystick('joystick1', 'player1');
+                this.setupJoystick('joystick2', 'player2');
+                this.setupButtons();
+                
+                // 防止页面滚动
+                document.addEventListener('touchmove', (e) => {
+                    if (e.target.closest('#mobileControls')) {
+                        e.preventDefault();
+                    }
+                }, { passive: false });
+            }
+
+            setupJoystick(joystickId, player) {
+                const joystick = document.getElementById(joystickId);
+                const base = joystick.parentElement;
+                let isDragging = false;
+                let startPos = { x: 0, y: 0 };
+
+                const handleStart = (e) => {
+                    e.preventDefault();
+                    isDragging = true;
+                    const rect = base.getBoundingClientRect();
+                    startPos.x = rect.left + rect.width / 2;
+                    startPos.y = rect.top + rect.height / 2;
+                };
+
+                const handleMove = (e) => {
+                    if (!isDragging) return;
+                    e.preventDefault();
+                    
+                    const touch = e.touches ? e.touches[0] : e;
+                    const dx = touch.clientX - startPos.x;
+                    const dy = touch.clientY - startPos.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    const maxDistance = 35;
+
+                    if (distance <= maxDistance) {
+                        joystick.style.transform = `translate(${dx - 25}px, ${dy - 25}px)`;
+                        this.joysticks[player].x = dx / maxDistance;
+                        this.joysticks[player].y = dy / maxDistance;
+                    } else {
+                        const angle = Math.atan2(dy, dx);
+                        const limitedX = Math.cos(angle) * maxDistance;
+                        const limitedY = Math.sin(angle) * maxDistance;
+                        joystick.style.transform = `translate(${limitedX - 25}px, ${limitedY - 25}px)`;
+                        this.joysticks[player].x = limitedX / maxDistance;
+                        this.joysticks[player].y = limitedY / maxDistance;
+                    }
+                    this.joysticks[player].active = true;
+                };
+
+                const handleEnd = (e) => {
+                    e.preventDefault();
+                    isDragging = false;
+                    joystick.style.transform = 'translate(-50%, -50%)';
+                    this.joysticks[player].x = 0;
+                    this.joysticks[player].y = 0;
+                    this.joysticks[player].active = false;
+                };
+
+                // 触摸事件
+                base.addEventListener('touchstart', handleStart, { passive: false });
+                base.addEventListener('touchmove', handleMove, { passive: false });
+                base.addEventListener('touchend', handleEnd, { passive: false });
+                
+                // 鼠标事件（用于测试）
+                base.addEventListener('mousedown', handleStart);
+                document.addEventListener('mousemove', handleMove);
+                document.addEventListener('mouseup', handleEnd);
+            }
+
+            setupButtons() {
+                const buttons = [
+                    { id: 'skillBtn1', player: 'player1', type: 'skill' },
+                    { id: 'throwBtn1', player: 'player1', type: 'throw' },
+                    { id: 'skillBtn2', player: 'player2', type: 'skill' },
+                    { id: 'throwBtn2', player: 'player2', type: 'throw' }
+                ];
+
+                buttons.forEach(btn => {
+                    const element = document.getElementById(btn.id);
+                    
+                    const handleStart = (e) => {
+                        e.preventDefault();
+                        element.classList.add('active');
+                        this.buttons[btn.player][btn.type] = true;
+                        this.buttons[btn.player][btn.type + 'Pressed'] = true;
+                    };
+
+                    const handleEnd = (e) => {
+                        e.preventDefault();
+                        element.classList.remove('active');
+                        this.buttons[btn.player][btn.type] = false;
+                        this.buttons[btn.player][btn.type + 'Pressed'] = false;
+                    };
+
+                    element.addEventListener('touchstart', handleStart, { passive: false });
+                    element.addEventListener('touchend', handleEnd, { passive: false });
+                    element.addEventListener('mousedown', handleStart);
+                    element.addEventListener('mouseup', handleEnd);
+                });
+            }
+
+            getInput(player) {
+                if (!this.isMobile) return null;
+                
+                return {
+                    joystick: this.joysticks[player],
+                    buttons: this.buttons[player]
+                };
+            }
+        }
+
+        const touchController = new TouchController();
 
         function dist(x1,y1,x2,y2) {
             const dx = x2 - x1, dy = y2 - y1;
@@ -491,11 +836,29 @@
                 }
 
                 let dirX=0, dirY=0;
+                let useSkillPressed = false;
+                let throwPressed = false;
+
                 if (acceptInput) {
-                    if (keys[this.controls.up]) dirY-=1;
-                    if (keys[this.controls.down]) dirY+=1;
-                    if (keys[this.controls.left]) dirX-=1;
-                    if (keys[this.controls.right]) dirX+=1;
+                    // 获取触屏输入
+                    const playerNum = this.color === '#88c0a0' ? 'player1' : 'player2';
+                    const touchInput = touchController.getInput(playerNum);
+                    
+                    if (touchInput && (touchInput.joystick.active || touchInput.buttons.skillPressed || touchInput.buttons.throwPressed)) {
+                        // 使用触屏摇杆输入
+                        dirX = touchInput.joystick.x;
+                        dirY = touchInput.joystick.y;
+                        useSkillPressed = touchInput.buttons.skill;
+                        throwPressed = touchInput.buttons.throw;
+                    } else {
+                        // 使用键盘输入
+                        if (keys[this.controls.up]) dirY-=1;
+                        if (keys[this.controls.down]) dirY+=1;
+                        if (keys[this.controls.left]) dirX-=1;
+                        if (keys[this.controls.right]) dirX+=1;
+                        useSkillPressed = keys[this.controls.drift];
+                        throwPressed = keys[this.controls.throwKey];
+                    }
                 }
 
                 if (dirX!==0||dirY!==0) {
@@ -511,12 +874,12 @@
                 }
 
                 // 使用技能
-                if (acceptInput && keys[this.controls.drift] && this.skillCooldown <= 0) {
+                if (acceptInput && useSkillPressed && this.skillCooldown <= 0) {
                     this.useSkill();
                 }
 
                 // 甩出流星锤
-                if (acceptInput && keys[this.controls.throwKey] && !this.chain.detached) {
+                if (acceptInput && throwPressed && !this.chain.detached) {
                     const ballData = this.chain.detachBall();
                     if (ballData) {
                         if (this.burstShotsRemaining > 0) {
@@ -799,6 +1162,12 @@ this.player2 = new Player(canvas.width-200,canvas.height/2,'#8faad9',{
         link.rel = 'stylesheet';
         link.href = 'https://fonts.googleapis.com/css2?family=Helvetica:wght@400;700&display=swap';
         document.head.appendChild(link);
+
+        // 添加Google Material Icons
+        const materialIconsLink = document.createElement('link');
+        materialIconsLink.rel = 'stylesheet';
+        materialIconsLink.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
+        document.head.appendChild(materialIconsLink);
     </script>
 </body>
 </html>
